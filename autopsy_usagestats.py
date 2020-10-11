@@ -79,9 +79,9 @@ class AutopsyUsagestatsIngestModule(FileIngestModule):
             self.log(Level.INFO, "found " + str(numFiles) + " files")
 
             # For an example, we will flag files with .txt in the name and make a blackboard artifact.
-            if datasource.getName().lower().endswith(".txt"):
+            if datasource.getName().isnumeric():
 
-                self.log(Level.INFO, "Found a text file: " + datasource.getName())
+                self.log(Level.INFO, "Found a usagestats file: " + datasource.getName())
                 self.filesFound += 1
 
             # # Make an artifact on the blackboard.  TSK_INTERESTING_FILE_HIT is a generic type of
@@ -116,7 +116,7 @@ class AutopsyUsagestatsIngestModule(FileIngestModule):
 
         # TODO: remove after testing
         except Exception as e:
-            with open('/home/ginger/Deskrop/traceback_autopsy.txt', 'w') as w:
+            with open('/tmp/traceback_autopsy.txt', 'w') as w:
                 w.write(str(e))
                 w.write('\n')
                 w.write(traceback.format_exc())
