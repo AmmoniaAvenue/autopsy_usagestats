@@ -26,7 +26,6 @@ from org.sleuthkit.autopsy.casemodule.services import FileManager
 # to create instances of the modules that will do the anlaysis.
 class AndroidUsagestatsFactory(IngestModuleFactoryAdapter):
     moduleName = "Android Usagestats"
-
     def getModuleDisplayName(self):
         return self.moduleName
 
@@ -66,9 +65,9 @@ class AutopsyUsagestatsIngestModule(FileIngestModule):
     def process(self, datasource):
         try:
             # Skip everything that is not a file
-            if ((file.getType() == TskData.TSK_DB_FILES_TYPE_ENUM.UNALLOC_BLOCKS) or
-                    (file.getType() == TskData.TSK_DB_FILES_TYPE_ENUM.UNUSED_BLOCKS) or
-                    (not file.isFile())):
+            if ((datasource.getType() == TskData.TSK_DB_FILES_TYPE_ENUM.UNALLOC_BLOCKS) or
+                    (datasource.getType() == TskData.TSK_DB_FILES_TYPE_ENUM.UNUSED_BLOCKS) or
+                    (not datasource.isFile())):
                 return IngestModule.ProcessResult.OK
             # The usagestats files are named after their EPOCH timestamp and found in directory:
             # /data/system/usagestats/
@@ -80,9 +79,9 @@ class AutopsyUsagestatsIngestModule(FileIngestModule):
             self.log(Level.INFO, "found " + str(numFiles) + " files")
 
             # For an example, we will flag files with .txt in the name and make a blackboard artifact.
-            if file.getName().lower().endswith(".txt"):
+            if datasource.getName().lower().endswith(".txt"):
 
-                self.log(Level.INFO, "Found a text file: " + file.getName())
+                self.log(Level.INFO, "Found a text file: " + datasource.getName())
                 self.filesFound += 1
 
             # # Make an artifact on the blackboard.  TSK_INTERESTING_FILE_HIT is a generic type of
