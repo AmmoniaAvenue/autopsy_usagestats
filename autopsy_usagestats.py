@@ -27,7 +27,7 @@ from org.sleuthkit.autopsy.casemodule.services import FileManager
 class AndroidUsagestatsFactory(IngestModuleFactoryAdapter):
     moduleName = "Android Usagestats"
 
-    `def getModuleDisplayName(self):
+    def getModuleDisplayName(self):
         return self.moduleName
 
     # TODO: Give it a description
