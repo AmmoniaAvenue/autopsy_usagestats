@@ -39,13 +39,13 @@ class AndroidUsagestatsFactory(IngestModuleFactoryAdapter):
 
     # can return null if isFileIngestModuleFactory returns false
     def createFileIngestModule(self, ingestOptions):
-        return SampleJythonFileIngestModule()
+        return AutopsyUsagestatsIngestModule()
 
 
 # File-level ingest module.  One gets created per thread.
 # TODO: Rename this to something more specific. Could just remove "Factory" from above name.
 # Looks at the attributes of the passed in file.
-class SampleJythonFileIngestModule(FileIngestModule):
+class AutopsyUsagestatsIngestModule(FileIngestModule):
     _logger = Logger.getLogger(AndroidUsagestatsFactory.moduleName)
 
     def log(self, level, msg):
