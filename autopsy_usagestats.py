@@ -1,5 +1,9 @@
 import inspect
 import traceback
+import xml.etree.ElementTree as ET
+
+import jarray
+
 import json
 import platform
 import subprocess
@@ -20,6 +24,27 @@ from org.sleuthkit.datamodel import TskData
 from org.sleuthkit.autopsy.casemodule import Case
 from org.sleuthkit.autopsy.casemodule.services import Services
 from org.sleuthkit.autopsy.casemodule.services import FileManager
+
+
+def calc_last_time_active(xml_element, filename):
+    """
+    Calculate the absolute time (in EPOCH) when an event was active for the last time.
+    :param xml_element: The element containing an lastTimeActive attribute
+    :param filename: A filename where the name contains digits only, representing the creation time in EPOCH.
+    :return: The EPOCH representation of the time an event was active for the last time.
+    """
+    if 'lastTimeActive' in xml_element.keys():
+        relative_last_time_active = int(xml_element.attrib['lastTimeActive'])
+
+        # Some events show the last_time_active as EPOCH already, which is indicated by starting with a minus sign
+        if relative_last_time_active < 0:
+            last_time_active = abs(relative_last_time_active)
+
+        # Otherwise we need to add the filename (which is the start time in EPOCH)
+        # to the relative time (represented in ms)
+        else:
+            last_time_active = int(filename) + relative_last_time_active
+        return last_time_active
 
 
 # Factory that defines the name and details of the module and allows Autopsy
@@ -74,15 +99,49 @@ class AutopsyUsagestatsIngestModule(FileIngestModule):
             # In there you'll find directories called either /monthly or /daily or /weekly or /yearly
             # In these directories the usagestats files are found.
             fileManager = Case.getCurrentCase().getServices().getFileManager()
-            files = fileManager.findFiles(datasource, "usagestats%")
-            numFiles = len(files)
-            self.log(Level.INFO, "found " + str(numFiles) + " files")
+            monthly = fileManager.findFiles(datasource, "monthly%")
+            daily = fileManager.findFiles(datasource, "daily%")
+            weekly = fileManager.findFiles(datasource, "weekly%")
+            yearly = fileManager.findFiles(datasource, "yearly%")
 
             # For an example, we will flag files with .txt in the name and make a blackboard artifact.
             if datasource.getName().isnumeric():
 
-                self.log(Level.INFO, "Found a usagestats file: " + datasource.getName())
+                self.log(Level.INFO, "Found a usagestats file: " + datasource.getLocalPath())
                 self.filesFound += 1
+
+                # get an input buffer
+                datasource_size = datasource.getSize()
+                datasource_contents = jarray.zeros(datasource_size, 'b')
+                datasource.read(datasource_contents, 0, datasource_size)
+                datasource.close()
+
+                try:
+                    tree = ET.fromstring(str(datasource_contents))
+                except ET.ParseError:
+                    self.log(Level.INFO, str(datasource_contents))
+                    self.log(Level.INFO, "Lukt niet")
+                    return
+
+                # We have sucessfully parsed the usagestats xml.
+                # So continue processing
+                tree_root = tree.getroot()
+
+                frequency = datasource.getLocalPath().split('/')[-2]
+
+                for xml_element in tree_root:
+                    for child in xml_element:
+                        all_attributes = json.dumps(child.attrib)
+                        self.log(Level.INFO, all_attributes)
+                        usage_type = xml_element.tag
+                        # If the attribute exists in this xml element, fetch its value. Otherwise set to ''
+                        last_active_time = calc_last_time_active(child, datasource.getName())
+                        package = child.attrib.get('package', '')
+                        time_active = child.attrib.get('timeActive', '')
+                        app_launch = child.attrib.get('appLaunchCount', '')
+                        type_class = child.attrib.get('class', '')
+                        type_type = child.attrib.get('type', '')
+                        self.log(Level.INFO, frequency)
 
             # # Make an artifact on the blackboard.  TSK_INTERESTING_FILE_HIT is a generic type of
             # # artifact.  Refer to the developer docs for other examples.
