@@ -1,6 +1,7 @@
 import inspect
 import traceback
 import xml.etree.ElementTree as ET
+from tempfile import NamedTemporaryFile
 
 import jarray
 
@@ -116,11 +117,13 @@ class AutopsyUsagestatsIngestModule(FileIngestModule):
                 datasource.read(datasource_contents, 0, datasource_size)
                 datasource.close()
 
+                temporary = tempfile.NamedTemporaryFile()
+                temporary.write(datasource_contents)
+
                 try:
-                    tree = ET.fromstring(str(datasource_contents))
+                    tree = ET.parse(temporary.name)
                 except ET.ParseError:
-                    self.log(Level.INFO, str(datasource_contents))
-                    self.log(Level.INFO, "Lukt niet")
+                    self.log(Level.INFO, "Can't parse this file as XML with xml.etree.ElementTree, skipping")
                     return
 
                 # We have sucessfully parsed the usagestats xml.
