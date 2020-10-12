@@ -90,6 +90,10 @@ class AutopsyUsagestatsIngestModule(FileIngestModule):
 
     def process(self, datasource):
         try:
+            def getBlackboardAtt(label, value):
+                return BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.fromLabel(label).getTypeID(),
+                                           AndroidUsagestatsFactory.moduleName, value)
+
             # Skip everything that is not a file
             if ((datasource.getType() == TskData.TSK_DB_FILES_TYPE_ENUM.UNALLOC_BLOCKS) or
                     (datasource.getType() == TskData.TSK_DB_FILES_TYPE_ENUM.UNUSED_BLOCKS) or
@@ -144,6 +148,11 @@ class AutopsyUsagestatsIngestModule(FileIngestModule):
                         app_launch = child.attrib.get('appLaunchCount', '')
                         type_class = child.attrib.get('class', '')
                         type_type = child.attrib.get('type', '')
+                        art = datasource.newArtifact(BlackboardArtifact.ARTIFACT_TYPE.TSK_TL_EVENT)
+                        # TODO placeholders
+                        art.addAttribute(getBlackboardAtt("TSK_TL_EVENT_TYPE", ''))
+                        art.addAttribute(getBlackboardAtt("TSK_DATETIME", 0))  # in seconds
+                        art.addAttribute(getBlackboardAtt("TSK_DESCRIPTION", ''))
                         self.log(Level.INFO, frequency)
 
             # # Make an artifact on the blackboard.  TSK_INTERESTING_FILE_HIT is a generic type of
