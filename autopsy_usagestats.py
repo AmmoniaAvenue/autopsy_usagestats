@@ -1,4 +1,5 @@
 import inspect
+import tempfile
 import traceback
 import xml.etree.ElementTree as ET
 from tempfile import NamedTemporaryFile
