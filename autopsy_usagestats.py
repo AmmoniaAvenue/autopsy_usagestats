@@ -102,6 +102,7 @@ class AutopsyUsagestatsIngestModule(FileIngestModule):
                     (datasource.getType() == TskData.TSK_DB_FILES_TYPE_ENUM.UNUSED_BLOCKS) or
                     (not datasource.isFile())):
                 return IngestModule.ProcessResult.OK
+
             # The usagestats files are named after their EPOCH timestamp and found in directory:
             # /data/system/usagestats/
             # In there you'll find directories called either /monthly or /daily or /weekly or /yearly
@@ -125,7 +126,7 @@ class AutopsyUsagestatsIngestModule(FileIngestModule):
                 # datasource.close()
 
                 temporary = tempfile.NamedTemporaryFile()
-                ContentUtils.writeToFile(file, File(temporary.name))
+                ContentUtils.writeToFile(datasource, File(temporary.name))
                 # temporary.write(datasource_contents)
 
                 try:
@@ -139,26 +140,41 @@ class AutopsyUsagestatsIngestModule(FileIngestModule):
 
                 # We have sucessfully parsed the usagestats xml.
                 # So continue processing
+
+                # TODO Find out how to access Sleuth Kit's database and insert these events
+                # These are the basic types
+                # https://github.com/sleuthkit/sleuthkit/blob/c5f90e4680868d4efd82743a45e8497ea52f320f/bindings/java/src/org/sleuthkit/datamodel/CaseDatabaseFactory.java#L388-L395
+                #              WHEN '1' THEN 'MOVE_TO_FOREGROUND'
+                #              WHEN '2' THEN 'MOVE_TO_BACKGROUND'
+                #              WHEN '5' THEN 'CONFIGURATION_CHANGE'
+                #              WHEN '7' THEN 'USER_INTERACTION'
+                #              WHEN '8' THEN 'SHORTCUT_INVOCATION'
+                # MAX(event_type_id) + 1 om database-onafhankelijk nieuwe id's te vinden
+                # Check the database for presence of our types. If not insert them.
+                # For anything else, make up a string like 'ANDROID_EVENT_777'
+                # INSERT INTO tsk_event_types (event_type_id, display_name, super_type_id)
+                # VALUES (?, ?, ?)
+
                 for xml_element in tree_root:
                     for child in xml_element:
-                        try:
-                            all_attributes = json.dumps(child.attrib)
-                            self.log(Level.INFO, all_attributes)
-                            usage_type = xml_element.tag
-                            # If the attribute exists in this xml element, fetch its value. Otherwise set to ''
-                            last_active_time = calc_last_time_active(child, datasource.getName())
-                            package = child.attrib.get('package', '')
-                            time_active = child.attrib.get('timeActive', '')
-                            app_launch = child.attrib.get('appLaunchCount', '')
-                            type_class = child.attrib.get('class', '')
-                            type_type = child.attrib.get('type', '')
-                            art = datasource.newArtifact(BlackboardArtifact.ARTIFACT_TYPE.TSK_TL_EVENT)
-                            # TODO placeholders
-                            art.addAttribute(getBlackboardAtt("TSK_TL_EVENT_TYPE", ''))
-                            art.addAttribute(getBlackboardAtt("TSK_DATETIME", 0))  # in seconds
-                            art.addAttribute(getBlackboardAtt("TSK_DESCRIPTION", ''))
-                        except:
-                            self.log(Level.WARNING, "Error getting attributes from element.")
+                        all_attributes = json.dumps(child.attrib)
+                        self.log(Level.INFO, all_attributes)
+                        usage_type = xml_element.tag
+                        # If the attribute exists in this xml element, fetch its value. Otherwise set to ''
+
+                        last_active_time = calc_last_time_active(child, datasource.getName())
+                        package = child.attrib.get('package', '')
+                        time_active = child.attrib.get('timeActive', 0)
+                        app_launch = child.attrib.get('appLaunchCount', '')
+                        type_class = child.attrib.get('class', '')
+                        type_type = child.attrib.get('type', '')
+                        self.log(Level.INFO, str(type(type_type)) + " " + str(type(time_active)))
+
+                        art = datasource.newArtifact(BlackboardArtifact.ARTIFACT_TYPE.TSK_TL_EVENT)
+                        # TODO placeholders
+                        art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_TL_EVENT_TYPE.getTypeID(), AndroidUsagestatsFactory.moduleName, 1))
+                        art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DATETIME.getTypeID(), AndroidUsagestatsFactory.moduleName, int(time_active)))  # in seconds
+                        art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DESCRIPTION.getTypeID(), AndroidUsagestatsFactory.moduleName, package))
 
         # TODO: remove after testing
         except Exception as e:
