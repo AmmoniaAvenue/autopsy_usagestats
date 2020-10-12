@@ -158,7 +158,6 @@ class AutopsyUsagestatsIngestModule(FileIngestModule):
                 for xml_element in tree_root:
                     for child in xml_element:
                         all_attributes = json.dumps(child.attrib)
-                        self.log(Level.INFO, all_attributes)
                         usage_type = xml_element.tag
                         # If the attribute exists in this xml element, fetch its value. Otherwise set to ''
 
@@ -168,13 +167,15 @@ class AutopsyUsagestatsIngestModule(FileIngestModule):
                         app_launch = child.attrib.get('appLaunchCount', '')
                         type_class = child.attrib.get('class', '')
                         type_type = child.attrib.get('type', '')
-                        self.log(Level.INFO, str(type(type_type)) + " " + str(type(time_active)))
 
                         art = datasource.newArtifact(BlackboardArtifact.ARTIFACT_TYPE.TSK_TL_EVENT)
                         # TODO placeholders
-                        art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_TL_EVENT_TYPE.getTypeID(), AndroidUsagestatsFactory.moduleName, 1))
-                        art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DATETIME.getTypeID(), AndroidUsagestatsFactory.moduleName, int(time_active)))  # in seconds
-                        art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DESCRIPTION.getTypeID(), AndroidUsagestatsFactory.moduleName, package))
+                        # art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_TL_EVENT_TYPE, AndroidUsagestatsFactory.moduleName, 26))
+                        # art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DATETIME, AndroidUsagestatsFactory.moduleName, int(time_active)))  # in seconds
+                        # art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DESCRIPTION, AndroidUsagestatsFactory.moduleName, package))
+                        art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_TL_EVENT_TYPE, AndroidUsagestatsFactory.moduleName, 3))
+                        art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DATETIME, AndroidUsagestatsFactory.moduleName, int(time_active)))  # in seconds
+                        art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DESCRIPTION, AndroidUsagestatsFactory.moduleName, package))
 
         # TODO: remove after testing
         except Exception as e:
@@ -182,6 +183,8 @@ class AutopsyUsagestatsIngestModule(FileIngestModule):
                 w.write(str(e))
                 w.write('\n')
                 w.write(traceback.format_exc())
+
+        IngestServices.getInstance().fireModuleDataEvent(ModuleDataEvent(AndroidUsagestatsFactory.moduleName, BlackboardArtifact.ARTIFACT_TYPE.TSK_TL_EVENT, None))
 
         return IngestModule.ProcessResult.OK
 
