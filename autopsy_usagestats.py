@@ -11,6 +11,7 @@ import platform
 import subprocess
 
 from java.util.logging import Level
+from java.io import File
 from org.sleuthkit.autopsy.coreutils import Logger
 from org.sleuthkit.autopsy.ingest import FileIngestModule
 from org.sleuthkit.datamodel import BlackboardArtifact
@@ -24,6 +25,7 @@ from org.sleuthkit.autopsy.ingest import IngestServices
 from org.sleuthkit.datamodel import ReadContentInputStream
 from org.sleuthkit.datamodel import TskData
 from org.sleuthkit.autopsy.casemodule import Case
+from org.sleuthkit.autopsy.datamodel import ContentUtils
 from org.sleuthkit.autopsy.casemodule.services import Services
 from org.sleuthkit.autopsy.casemodule.services import FileManager
 
@@ -115,76 +117,48 @@ class AutopsyUsagestatsIngestModule(FileIngestModule):
 
                 self.log(Level.INFO, "Found a usagestats file: " + datasource.getLocalPath())
                 self.filesFound += 1
-
                 # get an input buffer
-                datasource_size = datasource.getSize()
-                datasource_contents = jarray.zeros(datasource_size, 'b')
-                datasource.read(datasource_contents, 0, datasource_size)
-                datasource.close()
+                # datasource_size = datasource.getSize()
+                # self.log(Level.INFO, "Size: " + str(datasource_size))
+                # datasource_contents = jarray.zeros(datasource_size, 'b')
+                # datasource.read(datasource_contents, 0, datasource_size)
+                # datasource.close()
 
                 temporary = tempfile.NamedTemporaryFile()
-                temporary.write(datasource_contents)
+                ContentUtils.writeToFile(file, File(temporary.name))
+                # temporary.write(datasource_contents)
 
                 try:
                     tree = ET.parse(temporary.name)
+                    tree_root = tree.getroot()
+
                 except ET.ParseError:
-                    self.log(Level.INFO, "Can't parse this file as XML with xml.etree.ElementTree, skipping")
+                    self.log(Level.WARNING, "Can't parse this file as XML with xml.etree.ElementTree, skipping")
+                    self.log(Level.WARNING, "For file: " + temporary.name)
                     return
 
                 # We have sucessfully parsed the usagestats xml.
                 # So continue processing
-                tree_root = tree.getroot()
-
-                frequency = datasource.getLocalPath().split('/')[-2]
-
                 for xml_element in tree_root:
                     for child in xml_element:
-                        all_attributes = json.dumps(child.attrib)
-                        self.log(Level.INFO, all_attributes)
-                        usage_type = xml_element.tag
-                        # If the attribute exists in this xml element, fetch its value. Otherwise set to ''
-                        last_active_time = calc_last_time_active(child, datasource.getName())
-                        package = child.attrib.get('package', '')
-                        time_active = child.attrib.get('timeActive', '')
-                        app_launch = child.attrib.get('appLaunchCount', '')
-                        type_class = child.attrib.get('class', '')
-                        type_type = child.attrib.get('type', '')
-                        art = datasource.newArtifact(BlackboardArtifact.ARTIFACT_TYPE.TSK_TL_EVENT)
-                        # TODO placeholders
-                        art.addAttribute(getBlackboardAtt("TSK_TL_EVENT_TYPE", ''))
-                        art.addAttribute(getBlackboardAtt("TSK_DATETIME", 0))  # in seconds
-                        art.addAttribute(getBlackboardAtt("TSK_DESCRIPTION", ''))
-                        self.log(Level.INFO, frequency)
-
-            # # Make an artifact on the blackboard.  TSK_INTERESTING_FILE_HIT is a generic type of
-            # # artifact.  Refer to the developer docs for other examples.
-            # art = file.newArtifact(BlackboardArtifact.ARTIFACT_TYPE.TSK_INTERESTING_FILE_HIT)
-            # att = BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_SET_NAME.getTypeID(),
-            #                           AndroidUsagestatsFactory.moduleName, "Text Files")
-            # art.addAttribute(att)
-            #
-            # # Fire an event to notify the UI and others that there is a new artifact
-            # IngestServices.getInstance().fireModuleDataEvent(
-            #     ModuleDataEvent(AndroidUsagestatsFactory.moduleName,
-            #                     BlackboardArtifact.ARTIFACT_TYPE.TSK_INTERESTING_FILE_HIT, None));
-            #
-            # # For the example (this wouldn't be needed normally), we'll query the blackboard for data that was added
-            # # by other modules. We then iterate over its attributes.  We'll just print them, but you would probably
-            # # want to do something with them.
-            # artifactList = file.getArtifacts(BlackboardArtifact.ARTIFACT_TYPE.TSK_INTERESTING_FILE_HIT)
-            # for artifact in artifactList:
-            #     attributeList = artifact.getAttributes();
-            #     for attrib in attributeList:
-            #         self.log(Level.INFO, attrib.toString())
-            #
-            # # To further the example, this code will read the contents of the file and count the number of bytes
-            # inputStream = ReadContentInputStream(file)
-            # buffer = jarray.zeros(1024, "b")
-            # totLen = 0
-            # len = inputStream.read(buffer)
-            # while (len != -1):
-            #     totLen = totLen + len
-            #     len = inputStream.read(buffer)
+                        try:
+                            all_attributes = json.dumps(child.attrib)
+                            self.log(Level.INFO, all_attributes)
+                            usage_type = xml_element.tag
+                            # If the attribute exists in this xml element, fetch its value. Otherwise set to ''
+                            last_active_time = calc_last_time_active(child, datasource.getName())
+                            package = child.attrib.get('package', '')
+                            time_active = child.attrib.get('timeActive', '')
+                            app_launch = child.attrib.get('appLaunchCount', '')
+                            type_class = child.attrib.get('class', '')
+                            type_type = child.attrib.get('type', '')
+                            art = datasource.newArtifact(BlackboardArtifact.ARTIFACT_TYPE.TSK_TL_EVENT)
+                            # TODO placeholders
+                            art.addAttribute(getBlackboardAtt("TSK_TL_EVENT_TYPE", ''))
+                            art.addAttribute(getBlackboardAtt("TSK_DATETIME", 0))  # in seconds
+                            art.addAttribute(getBlackboardAtt("TSK_DESCRIPTION", ''))
+                        except:
+                            self.log(Level.WARNING, "Error getting attributes from element.")
 
         # TODO: remove after testing
         except Exception as e:
