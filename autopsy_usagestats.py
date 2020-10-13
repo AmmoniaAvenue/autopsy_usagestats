@@ -2,33 +2,21 @@ import inspect
 import tempfile
 import traceback
 import xml.etree.ElementTree as ET
-from tempfile import NamedTemporaryFile
-
-import jarray
-
 import json
-import platform
-import subprocess
-
 from java.util.logging import Level
 from java.io import File
 from org.sleuthkit.autopsy.coreutils import Logger
 from org.sleuthkit.autopsy.ingest import FileIngestModule
 from org.sleuthkit.datamodel import BlackboardArtifact
 from org.sleuthkit.datamodel import BlackboardAttribute
-from org.sleuthkit.datamodel import TskData
 from org.sleuthkit.autopsy.ingest import IngestMessage
 from org.sleuthkit.autopsy.ingest import IngestModule
 from org.sleuthkit.autopsy.ingest import IngestModuleFactoryAdapter
 from org.sleuthkit.autopsy.ingest import ModuleDataEvent
 from org.sleuthkit.autopsy.ingest import IngestServices
-from org.sleuthkit.datamodel import ReadContentInputStream
 from org.sleuthkit.datamodel import TskData
 from org.sleuthkit.autopsy.casemodule import Case
 from org.sleuthkit.autopsy.datamodel import ContentUtils
-from org.sleuthkit.autopsy.casemodule.services import Services
-from org.sleuthkit.autopsy.casemodule.services import FileManager
-
 
 def calc_last_time_active(xml_element, filename):
     """
@@ -48,7 +36,8 @@ def calc_last_time_active(xml_element, filename):
         # to the relative time (represented in ms)
         else:
             last_time_active = int(filename) + relative_last_time_active
-        return last_time_active
+        # time from ms to s since epoch
+        return last_time_active/1000
 
 
 # Factory that defines the name and details of the module and allows Autopsy
@@ -157,25 +146,55 @@ class AutopsyUsagestatsIngestModule(FileIngestModule):
 
                 for xml_element in tree_root:
                     for child in xml_element:
-                        all_attributes = json.dumps(child.attrib)
-                        usage_type = xml_element.tag
-                        # If the attribute exists in this xml element, fetch its value. Otherwise set to ''
+                        try:
+                            all_attributes = json.dumps(child.attrib)
+                            usage_type = xml_element.tag
+                            # If the attribute exists in this xml element, fetch its value. Otherwise set to ''
 
-                        last_active_time = calc_last_time_active(child, datasource.getName())
-                        package = child.attrib.get('package', '')
-                        time_active = child.attrib.get('timeActive', 0)
-                        app_launch = child.attrib.get('appLaunchCount', '')
-                        type_class = child.attrib.get('class', '')
-                        type_type = child.attrib.get('type', '')
+                            last_active_time = calc_last_time_active(child, datasource.getName())
+                            package = child.attrib.get('package', '')
+                            time_active = child.attrib.get('timeActive', 0)
+                            app_launch = child.attrib.get('appLaunchCount', '')
+                            type_class = child.attrib.get('class', '')
+                            type_type = child.attrib.get('type', '')
 
-                        art = datasource.newArtifact(BlackboardArtifact.ARTIFACT_TYPE.TSK_TL_EVENT)
-                        # TODO placeholders
-                        # art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_TL_EVENT_TYPE, AndroidUsagestatsFactory.moduleName, 26))
-                        # art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DATETIME, AndroidUsagestatsFactory.moduleName, int(time_active)))  # in seconds
-                        # art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DESCRIPTION, AndroidUsagestatsFactory.moduleName, package))
-                        art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_TL_EVENT_TYPE, AndroidUsagestatsFactory.moduleName, 3))
-                        art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DATETIME, AndroidUsagestatsFactory.moduleName, int(time_active)))  # in seconds
-                        art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DESCRIPTION, AndroidUsagestatsFactory.moduleName, package))
+                            secs_since_epoch = calc_last_time_active(child, datasource.getName())
+
+                            # art = datasource.newArtifact(BlackboardArtifact.ARTIFACT_TYPE.TSK_TL_EVENT)
+
+                            # event_type = BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_TL_EVENT_TYPE, AndroidUsagestatsFactory.moduleName, 23)
+                            # datetime = BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DATETIME, AndroidUsagestatsFactory.moduleName, int(time_active))  # in seconds
+                            # description = BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DESCRIPTION, AndroidUsagestatsFactory.moduleName, package)
+                            # art.addAttributes([event_type, datetime, description])
+
+                            art = datasource.newArtifact(BlackboardArtifact.ARTIFACT_TYPE.TSK_PROG_RUN)
+                            # prog_name = getBlackboardAtt("TSK_PROG_NAME", package)
+                            # self.log(Level.INFO, "Package Info: " + package)
+                            # count = getBlackboardAtt("TSK_COUNT", int(app_launch or 1))
+                            # self.log(Level.INFO, "Count: " + app_launch)
+                            # datetime = getBlackboardAtt("TSK_DATETIME", int(secs_since_epoch))
+                            # self.log(Level.INFO, "Datetime: " + str(secs_since_epoch))
+
+                            prog_name = BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PROG_NAME.getTypeID(), AndroidUsagestatsFactory.moduleName, package)
+                            self.log(Level.INFO, "Package Info: " + str(package))
+                            # count = BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_COUNT.getTypeID(), AndroidUsagestatsFactory.moduleName, '1')
+                            # self.log(Level.INFO, "Cunt Info: " + str(app_launch))
+                            datetime = BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DATETIME, AndroidUsagestatsFactory.moduleName, secs_since_epoch)
+                            self.log(Level.INFO, "Datetime: " + str(secs_since_epoch))
+                            art.addAttributes([prog_name, datetime])
+
+                            IngestServices.getInstance().fireModuleDataEvent(
+                                ModuleDataEvent(AndroidUsagestatsFactory.moduleName,
+                                                BlackboardArtifact.ARTIFACT_TYPE.TSK_PROG_RUN, None))
+
+                        except Exception as e:
+                            with open('/tmp/traceback_autopsy.txt', 'a') as w:
+                                w.write(str(e))
+                                w.write('\n')
+                                w.write(traceback.format_exc())
+
+                            continue
+
 
         # TODO: remove after testing
         except Exception as e:
@@ -183,8 +202,6 @@ class AutopsyUsagestatsIngestModule(FileIngestModule):
                 w.write(str(e))
                 w.write('\n')
                 w.write(traceback.format_exc())
-
-        IngestServices.getInstance().fireModuleDataEvent(ModuleDataEvent(AndroidUsagestatsFactory.moduleName, BlackboardArtifact.ARTIFACT_TYPE.TSK_TL_EVENT, None))
 
         return IngestModule.ProcessResult.OK
 
