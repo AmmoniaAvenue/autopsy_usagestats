@@ -81,127 +81,71 @@ class AutopsyUsagestatsIngestModule(FileIngestModule):
         pass
 
     def process(self, datasource):
-        try:
-            def getBlackboardAtt(label, value):
-                return BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.fromLabel(label).getTypeID(),
-                                           AndroidUsagestatsFactory.moduleName, value)
 
-            # Skip everything that is not a file
-            if ((datasource.getType() == TskData.TSK_DB_FILES_TYPE_ENUM.UNALLOC_BLOCKS) or
-                    (datasource.getType() == TskData.TSK_DB_FILES_TYPE_ENUM.UNUSED_BLOCKS) or
-                    (not datasource.isFile())):
-                return IngestModule.ProcessResult.OK
+        # Skip everything that is not a file
+        if ((datasource.getType() == TskData.TSK_DB_FILES_TYPE_ENUM.UNALLOC_BLOCKS) or
+                (datasource.getType() == TskData.TSK_DB_FILES_TYPE_ENUM.UNUSED_BLOCKS) or
+                (not datasource.isFile())):
+            return IngestModule.ProcessResult.OK
 
-            # The usagestats files are named after their EPOCH timestamp and found in directory:
-            # /data/system/usagestats/
-            # In there you'll find directories called either /monthly or /daily or /weekly or /yearly
-            # In these directories the usagestats files are found.
-            fileManager = Case.getCurrentCase().getServices().getFileManager()
-            monthly = fileManager.findFiles(datasource, "monthly%")
-            daily = fileManager.findFiles(datasource, "daily%")
-            weekly = fileManager.findFiles(datasource, "weekly%")
-            yearly = fileManager.findFiles(datasource, "yearly%")
+        # The usagestats files are named after their EPOCH timestamp and found in directory:
+        # /data/system/usagestats/
+        # In there you'll find directories called either /monthly or /daily or /weekly or /yearly
+        # In these directories the usagestats files are found.
+        fileManager = Case.getCurrentCase().getServices().getFileManager()
+        monthly = fileManager.findFiles(datasource, "monthly%")
+        daily = fileManager.findFiles(datasource, "daily%")
+        weekly = fileManager.findFiles(datasource, "weekly%")
+        yearly = fileManager.findFiles(datasource, "yearly%")
 
-            # For an example, we will flag files with .txt in the name and make a blackboard artifact.
-            if datasource.getName().isnumeric():
+        # For an example, we will flag files with .txt in the name and make a blackboard artifact.
+        if datasource.getName().isnumeric():
 
-                self.log(Level.INFO, "Found a usagestats file: " + datasource.getLocalPath())
-                self.filesFound += 1
-                # get an input buffer
-                # datasource_size = datasource.getSize()
-                # self.log(Level.INFO, "Size: " + str(datasource_size))
-                # datasource_contents = jarray.zeros(datasource_size, 'b')
-                # datasource.read(datasource_contents, 0, datasource_size)
-                # datasource.close()
+            self.log(Level.INFO, "Found a usagestats file: " + datasource.getLocalPath())
+            self.filesFound += 1
 
-                temporary = tempfile.NamedTemporaryFile()
-                ContentUtils.writeToFile(datasource, File(temporary.name))
-                # temporary.write(datasource_contents)
+            temporary = tempfile.NamedTemporaryFile()
+            ContentUtils.writeToFile(datasource, File(temporary.name))
 
-                try:
-                    tree = ET.parse(temporary.name)
-                    tree_root = tree.getroot()
+            try:
+                tree = ET.parse(temporary.name)
+                tree_root = tree.getroot()
 
-                except ET.ParseError:
-                    self.log(Level.WARNING, "Can't parse this file as XML with xml.etree.ElementTree, skipping")
-                    self.log(Level.WARNING, "For file: " + temporary.name)
-                    return
+            except ET.ParseError:
+                self.log(Level.WARNING, "Can't parse this file as XML with xml.etree.ElementTree, skipping")
+                self.log(Level.WARNING, "For file: " + temporary.name)
+                return
 
-                # We have sucessfully parsed the usagestats xml.
-                # So continue processing
+            # We have sucessfully parsed the usagestats xml.
+            # So continue processing
 
-                # TODO Find out how to access Sleuth Kit's database and insert these events
-                # These are the basic types
-                # https://github.com/sleuthkit/sleuthkit/blob/c5f90e4680868d4efd82743a45e8497ea52f320f/bindings/java/src/org/sleuthkit/datamodel/CaseDatabaseFactory.java#L388-L395
-                #              WHEN '1' THEN 'MOVE_TO_FOREGROUND'
-                #              WHEN '2' THEN 'MOVE_TO_BACKGROUND'
-                #              WHEN '5' THEN 'CONFIGURATION_CHANGE'
-                #              WHEN '7' THEN 'USER_INTERACTION'
-                #              WHEN '8' THEN 'SHORTCUT_INVOCATION'
-                # MAX(event_type_id) + 1 om database-onafhankelijk nieuwe id's te vinden
-                # Check the database for presence of our types. If not insert them.
-                # For anything else, make up a string like 'ANDROID_EVENT_777'
-                # INSERT INTO tsk_event_types (event_type_id, display_name, super_type_id)
-                # VALUES (?, ?, ?)
+            for xml_element in tree_root:
+                for child in xml_element:
 
-                for xml_element in tree_root:
-                    for child in xml_element:
-                        try:
-                            all_attributes = json.dumps(child.attrib)
-                            usage_type = xml_element.tag
-                            # If the attribute exists in this xml element, fetch its value. Otherwise set to ''
+                        all_attributes = json.dumps(child.attrib)
+                        usage_type = xml_element.tag
+                        # If the attribute exists in this xml element, fetch its value. Otherwise set to ''
 
-                            last_active_time = calc_last_time_active(child, datasource.getName())
-                            package = child.attrib.get('package', '')
-                            time_active = child.attrib.get('timeActive', 0)
-                            app_launch = child.attrib.get('appLaunchCount', '')
-                            type_class = child.attrib.get('class', '')
-                            type_type = child.attrib.get('type', '')
+                        last_active_time = calc_last_time_active(child, datasource.getName())
+                        package = child.attrib.get('package', '')
+                        # TODO: use these artifacts too
+                        time_active = child.attrib.get('timeActive', 0)
+                        app_launch = child.attrib.get('appLaunchCount', '')
+                        type_class = child.attrib.get('class', '')
+                        type_type = child.attrib.get('type', '')
 
-                            secs_since_epoch = calc_last_time_active(child, datasource.getName())
+                        secs_since_epoch = calc_last_time_active(child, datasource.getName())
+                        # TODO: Also add artifacts to the timeline
+                        art = datasource.newArtifact(BlackboardArtifact.ARTIFACT_TYPE.TSK_PROG_RUN)
+                        prog_name = BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PROG_NAME.getTypeID(), AndroidUsagestatsFactory.moduleName, package)
+                        self.log(Level.INFO, "Package Info: " + str(package))
+                        datetime = BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DATETIME, AndroidUsagestatsFactory.moduleName, secs_since_epoch)
+                        self.log(Level.INFO, "Datetime: " + str(secs_since_epoch))
+                        art.addAttributes([prog_name, datetime])
 
-                            # art = datasource.newArtifact(BlackboardArtifact.ARTIFACT_TYPE.TSK_TL_EVENT)
-
-                            # event_type = BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_TL_EVENT_TYPE, AndroidUsagestatsFactory.moduleName, 23)
-                            # datetime = BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DATETIME, AndroidUsagestatsFactory.moduleName, int(time_active))  # in seconds
-                            # description = BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DESCRIPTION, AndroidUsagestatsFactory.moduleName, package)
-                            # art.addAttributes([event_type, datetime, description])
-
-                            art = datasource.newArtifact(BlackboardArtifact.ARTIFACT_TYPE.TSK_PROG_RUN)
-                            # prog_name = getBlackboardAtt("TSK_PROG_NAME", package)
-                            # self.log(Level.INFO, "Package Info: " + package)
-                            # count = getBlackboardAtt("TSK_COUNT", int(app_launch or 1))
-                            # self.log(Level.INFO, "Count: " + app_launch)
-                            # datetime = getBlackboardAtt("TSK_DATETIME", int(secs_since_epoch))
-                            # self.log(Level.INFO, "Datetime: " + str(secs_since_epoch))
-
-                            prog_name = BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PROG_NAME.getTypeID(), AndroidUsagestatsFactory.moduleName, package)
-                            self.log(Level.INFO, "Package Info: " + str(package))
-                            # count = BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_COUNT.getTypeID(), AndroidUsagestatsFactory.moduleName, '1')
-                            # self.log(Level.INFO, "Cunt Info: " + str(app_launch))
-                            datetime = BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DATETIME, AndroidUsagestatsFactory.moduleName, secs_since_epoch)
-                            self.log(Level.INFO, "Datetime: " + str(secs_since_epoch))
-                            art.addAttributes([prog_name, datetime])
-
-                            IngestServices.getInstance().fireModuleDataEvent(
-                                ModuleDataEvent(AndroidUsagestatsFactory.moduleName,
-                                                BlackboardArtifact.ARTIFACT_TYPE.TSK_PROG_RUN, None))
-
-                        except Exception as e:
-                            with open('/tmp/traceback_autopsy.txt', 'a') as w:
-                                w.write(str(e))
-                                w.write('\n')
-                                w.write(traceback.format_exc())
-
-                            continue
-
-
-        # TODO: remove after testing
-        except Exception as e:
-            with open('/tmp/traceback_autopsy.txt', 'w') as w:
-                w.write(str(e))
-                w.write('\n')
-                w.write(traceback.format_exc())
+                        IngestServices.getInstance().fireModuleDataEvent(
+                            ModuleDataEvent(AndroidUsagestatsFactory.moduleName,
+                                            BlackboardArtifact.ARTIFACT_TYPE.TSK_PROG_RUN, None))
 
         return IngestModule.ProcessResult.OK
 
